@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="300">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clima Rio de Janeiro - Painel Automático</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --card-bg: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --accent: #58a6ff;
+            --orange: #f0883e;
+            --green: #3fb950;
+            --red: #f85149;
+            --purple: #a371f7;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 15px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px; }
+        .header h1 { font-size: 1.4rem; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .header .meta { font-size: 0.85rem; color: #8b949e; text-align: right; }
+        
+        .stale-banner { background: rgba(227, 179, 65, 0.15); border: 1px solid #e3b341; border-radius: 8px; padding: 12px 15px; margin-bottom: 15px; color: #e3b341; }
+        .stale-title { font-weight: bold; font-size: 0.9rem; margin-bottom: 6px; }
+        .stale-banner ul { margin-left: 20px; font-size: 0.8rem; color: #c9d1d9; }
+
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 15px; }
+        .metric-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
+        .metric-card .title { font-size: 0.75rem; text-transform: uppercase; color: #8b949e; margin-bottom: 4px; }
+        .metric-card .value { font-size: 1.6rem; font-weight: bold; color: #fff; }
+        .metric-card .sub { font-size: 0.8rem; color: var(--accent); margin-top: 2px; }
+
+        .main-content { display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 15px; }
+        @media(min-width: 900px) {
+            .main-content { grid-template-columns: 320px 1fr; }
+        }
+
+        .sidebar { display: flex; flex-direction: column; gap: 12px; }
+        .summary-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 15px; text-align: center; }
+        .summary-card .large-icon { font-size: 3.5rem; margin-bottom: 5px; }
+        .summary-card .cond { font-size: 1.1rem; font-weight: 600; color: #fff; }
+        
+        .forecast-container { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+        .forecast-title { font-size: 0.85rem; text-transform: uppercase; color: #8b949e; margin-bottom: 8px; font-weight: bold; }
+        .forecast-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+        .forecast-day { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center; font-size: 0.8rem; }
+        .forecast-day .day-name { font-weight: bold; color: var(--accent); }
+        .forecast-day .day-icon { font-size: 1.5rem; margin: 2px 0; }
+        .forecast-day .t-max { color: var(--orange); font-weight: bold; }
+        .forecast-day .t-min { color: var(--accent); }
+        .forecast-day .day-rain { font-size: 0.75rem; color: #8b949e; margin-top: 2px; }
+
+        /* Qualidade do Ar Card */
+        .air-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+        .air-header { display: flex; justify-content: space-between; align-items: center; }
+        .air-title { font-size: 0.8rem; text-transform: uppercase; font-weight: bold; color: #8b949e; }
+        .air-badge { font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        .air-val-row { display: flex; align-items: baseline; gap: 8px; }
+        .air-num { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+        .air-scale { font-size: 0.75rem; color: #8b949e; }
+        .air-desc { font-size: 0.75rem; color: #c9d1d9; line-height: 1.3; }
+        .air-pollutants { display: flex; justify-content: space-between; font-size: 0.7rem; color: #8b949e; border-top: 1px solid #21262d; padding-top: 6px; margin-top: 2px; }
+        .air-pollutants strong { color: #c9d1d9; }
+
+        .map-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; height: 500px; }
+        .map-header { padding: 8px 15px; background: #1c2128; border-bottom: 1px solid var(--border); font-size: 0.85rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .map-tabs { display: flex; gap: 6px; }
+        .tab-btn { background: #0d1117; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s ease; }
+        .tab-btn:hover { background: #21262d; color: #fff; }
+        .tab-btn.active { background: var(--accent); color: #0d1117; font-weight: bold; border-color: var(--accent); }
+        .map-view { flex: 1; width: 100%; height: 100%; display: none; }
+        .map-view.active { display: block; }
+        .map-frame { border: none; width: 100%; height: 100%; }
+
+        /* Painéis Regionais (INMET + Queimadas) */
+        .regional-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        .regional-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+        .regional-header { padding: 10px 15px; background: #1c2128; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .regional-header h2 { font-size: 0.95rem; color: #fff; display: flex; align-items: center; gap: 6px; }
+        .regional-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+        .inmet-item { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+        .inmet-item-top { display: flex; justify-content: space-between; align-items: center; }
+        .inmet-desc { font-size: 0.85rem; font-weight: bold; color: #fff; }
+        .inmet-time { font-size: 0.72rem; color: var(--accent); }
+        .inmet-risco { font-size: 0.75rem; color: #8b949e; line-height: 1.3; }
+        
+        .firms-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+        .firms-stat-box { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; }
+        .firms-stat-num { font-size: 1.6rem; font-weight: bold; color: #fff; }
+        .firms-stat-lbl { font-size: 0.72rem; color: #8b949e; text-transform: uppercase; }
+
+        /* Indicadores Climáticos Globais (NASA / NOAA) */
+        .climate-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 15px; }
+        .climate-header { padding: 12px 15px; background: #1c2128; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .climate-header h2 { font-size: 1.05rem; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .climate-header .sub { font-size: 0.8rem; color: #8b949e; }
+        .climate-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; padding: 15px; }
+        .climate-item { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px; border-left: 4px solid var(--accent); }
+        .climate-item.temp-item { border-left-color: var(--orange); }
+        .climate-item.enso-item { border-left-color: #a371f7; }
+        .climate-item.enso-item .climate-date-badge { color: #a371f7; }
+        .climate-item.ch4-item { border-left-color: #3fb950; }
+        .climate-item.ch4-item .climate-date-badge { color: #3fb950; }
+        .climate-item-top { display: flex; justify-content: space-between; align-items: center; }
+        .climate-label { font-size: 0.85rem; font-weight: 600; color: #fff; text-transform: uppercase; letter-spacing: 0.5px; }
+        .climate-date-badge { font-size: 0.75rem; background: #21262d; color: var(--accent); padding: 3px 8px; border-radius: 12px; border: 1px solid #30363d; font-weight: 500; }
+        .climate-item.temp-item .climate-date-badge { color: var(--orange); }
+        .climate-val { font-size: 2.2rem; font-weight: 800; color: #fff; line-height: 1.1; margin: 4px 0; }
+        .climate-val span { font-size: 1.1rem; font-weight: normal; color: #8b949e; margin-left: 2px; }
+        .climate-desc { font-size: 0.8rem; color: #8b949e; line-height: 1.4; }
+        .sparkline-container { height: 70px; margin-top: 5px; width: 100%; }
+        .climate-footer { padding: 10px 15px; background: #141920; border-top: 1px solid var(--border); font-size: 0.78rem; color: #8b949e; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
+        .climate-footer a { color: var(--accent); text-decoration: none; font-weight: 500; }
+        .climate-footer a:hover { text-decoration: underline; }
+
+        /* Alertas Globais */
+        .alerts-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        .alerts-header { padding: 12px 15px; background: #1c2128; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .alerts-header h2 { font-size: 1.05rem; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .alerts-header .sub { font-size: 0.8rem; color: #8b949e; }
+        .alerts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; padding: 15px; }
+        .alert-item { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px; transition: border-color 0.2s; }
+        .alert-item:hover { border-color: #58a6ff; }
+        .alert-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+        .alert-country { font-size: 0.95rem; color: #fff; display: flex; align-items: center; gap: 6px; }
+        .alert-icon { font-size: 1.2rem; }
+        .alert-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+        .badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; }
+        .badge-red { background: rgba(248, 81, 73, 0.2); color: var(--red); border: 1px solid var(--red); }
+        .badge-orange { background: rgba(240, 136, 62, 0.2); color: var(--orange); border: 1px solid var(--orange); }
+        .badge-green { background: rgba(63, 185, 80, 0.2); color: var(--green); border: 1px solid var(--green); }
+        .badge-geo { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+        .badge-clim { background: rgba(88, 166, 255, 0.15); color: var(--accent); border: 1px solid rgba(88, 166, 255, 0.4); }
+        .alert-title { font-size: 0.85rem; color: #c9d1d9; line-height: 1.35; }
+        .alert-meta { font-size: 0.8rem; color: #8b949e; }
+        .alert-footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #21262d; padding-top: 8px; margin-top: auto; font-size: 0.75rem; }
+        .alert-note { color: #8b949e; font-size: 0.72rem; }
+        .alert-link { color: var(--accent); text-decoration: none; font-weight: 500; }
+        .alert-link:hover { text-decoration: underline; }
+    </style>
+    <script>
+        function switchMap(target) {
+            document.querySelectorAll('.map-view').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            if (target === 'rio') {
+                document.getElementById('map-view-rio').classList.add('active');
+                document.getElementById('tab-rio').classList.add('active');
+            } else {
+                document.getElementById('map-view-world').classList.add('active');
+                document.getElementById('tab-world').classList.add('active');
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const co2Labels = ["01/11/2025", "01/12/2025", "01/01/2026", "01/02/2026", "01/03/2026", "01/04/2026", "01/05/2026", "01/06/2026", "01/07/2026", "01/08/2026", "01/09/2026", "01/10/2026"];
+            const co2Data = [426.46, 427.49, 428.62, 429.35, 430.15, 431.12, 432.34, 431.43, 429.13, 427.55, 426.07, 426.69];
+            const tempLabels = ["01/11/2025", "01/12/2025", "01/01/2026", "01/02/2026", "01/03/2026", "01/04/2026", "01/05/2026", "01/06/2026", "01/07/2026", "01/08/2026", "01/09/2026", "01/10/2026"];
+            const tempData = [1.21, 1.05, 1.08, 1.23, 1.3, 1.16, 1.13, 1.18, 1.24, 1.42, 1.39, 1.55];
+            const ch4Labels = ["01/09/2025", "01/10/2025", "01/11/2025", "01/12/2025", "01/01/2026", "01/02/2026", "01/03/2026", "01/04/2026", "01/05/2026", "01/06/2026", "01/07/2026", "01/08/2026"];
+            const ch4Data = [1936.52, 1936.83, 1937.19, 1937.6, 1938.1, 1938.64, 1939.26, 1939.99, 1940.79, 1941.66, 1942.6, 1943.59];
+            const oniLabels = ["01/10/2025", "01/11/2025", "01/12/2025", "01/01/2026", "01/02/2026", "01/03/2026", "01/04/2026", "01/05/2026", "01/06/2026", "01/07/2026", "01/08/2026", "01/09/2026"];
+            const oniData = [-0.57, -0.61, -0.6, -0.39, -0.21, 0.11, 0.46, 0.95, 1.39, 1.8, 2.16, 2.46];
+
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                scales: {
+                    x: { display: false },
+                    y: { display: false }
+                },
+                elements: {
+                    point: { radius: 2, hoverRadius: 4 },
+                    line: { tension: 0.3 }
+                }
+            };
+
+            const ctxCo2 = document.getElementById('co2Chart');
+            if (ctxCo2 && co2Data.length > 0) {
+                new Chart(ctxCo2, {
+                    type: 'line',
+                    data: {
+                        labels: co2Labels,
+                        datasets: [{
+                            data: co2Data,
+                            borderColor: '#58a6ff',
+                            backgroundColor: 'rgba(88, 166, 255, 0.1)',
+                            borderWidth: 2,
+                            fill: true
+                        }]
+                    },
+                    options: chartOptions
+                });
+            }
+
+            const ctxOni = document.getElementById('oniChart');
+            if (ctxOni && oniData.length > 0) {
+                new Chart(ctxOni, {
+                    type: 'line',
+                    data: {
+                        labels: oniLabels,
+                        datasets: [{
+                            data: oniData,
+                            borderColor: '#a371f7',
+                            backgroundColor: 'rgba(163, 113, 247, 0.1)',
+                            borderWidth: 2,
+                            fill: true
+                        }]
+                    },
+                    options: chartOptions
+                });
+            }
+
+            const ctxCh4 = document.getElementById('ch4Chart');
+            if (ctxCh4 && ch4Data.length > 0) {
+                new Chart(ctxCh4, {
+                    type: 'line',
+                    data: {
+                        labels: ch4Labels,
+                        datasets: [{
+                            data: ch4Data,
+                            borderColor: '#3fb950',
+                            backgroundColor: 'rgba(63, 185, 80, 0.1)',
+                            borderWidth: 2,
+                            fill: true
+                        }]
+                    },
+                    options: chartOptions
+                });
+            }
+
+            const ctxTemp = document.getElementById('tempChart');
+            if (ctxTemp && tempData.length > 0) {
+                new Chart(ctxTemp, {
+                    type: 'line',
+                    data: {
+                        labels: tempLabels,
+                        datasets: [{
+                            data: tempData,
+                            borderColor: '#f0883e',
+                            backgroundColor: 'rgba(240, 136, 62, 0.1)',
+                            borderWidth: 2,
+                            fill: true
+                        }]
+                    },
+                    options: chartOptions
+                });
+            }
+        });
+    </script>
+</head>
+<body>
+    <div class="header">
+        <h1>🌊 Rio de Janeiro - RJ <span>⛅</span></h1>
+        <div class="meta">
+            <div>Atualizado em: <strong>21/11/2026 18:20</strong></div>
+            <div>Fontes: Open-Meteo + INMET + NASA FIRMS + GDACS + NASA/NOAA</div>
+        </div>
+    </div>
+
+    <div class="alerts-card" style="margin-bottom:18px;"><div class="alerts-header"><h2>🩺 Saúde e Observabilidade das Fontes</h2><div class="sub">Monitoramento de frescor dos caches e arquivos operacionais</div></div><div class="alerts-grid"><div class="alert-item" style="padding:10px 12px;"><div class="alert-top"><div class="alert-country"><strong>Indicadores Globais</strong></div><div><span class="badge badge-clim">DEFASADO</span></div></div><div class="alert-meta" style="font-size:0.8rem;color:#8b949e;">Atualizado: 21/11 06:48 (692 min)</div></div><div class="alert-item" style="padding:10px 12px;"><div class="alert-top"><div class="alert-country"><strong>Central Global</strong></div><div><span class="badge" style="background:#1f6feb33;color:#58a6ff;">OK</span></div></div><div class="alert-meta" style="font-size:0.8rem;color:#8b949e;">Atualizado: 21/11 18:20 (0 min)</div></div><div class="alert-item" style="padding:10px 12px;"><div class="alert-top"><div class="alert-country"><strong>Pareceres Institutos</strong></div><div><span class="badge" style="background:#1f6feb33;color:#58a6ff;">OK</span></div></div><div class="alert-meta" style="font-size:0.8rem;color:#8b949e;">Atualizado: 21/11 18:20 (0 min)</div></div><div class="alert-item" style="padding:10px 12px;"><div class="alert-top"><div class="alert-country"><strong>Historico Local</strong></div><div><span class="badge badge-clim">DEFASADO</span></div></div><div class="alert-meta" style="font-size:0.8rem;color:#8b949e;">Atualizado: 21/11 06:48 (692 min)</div></div></div></div>
+
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <div class="title">Temperatura</div>
+            <div class="value">25.7°C</div>
+            <div class="sub">Sensação: 31.5°C</div>
+        </div>
+        <div class="metric-card">
+            <div class="title">Condição</div>
+            <div class="value" style="font-size: 1.1rem; padding-top: 8px;">⛈️</div>
+            <div class="sub">Tempestade / Trovoada</div>
+        </div>
+        <div class="metric-card">
+            <div class="title">Vento</div>
+            <div class="value">6.6 <span style="font-size: 0.9rem">km/h</span></div>
+            <div class="sub">Direção: 171°</div>
+        </div>
+        <div class="metric-card">
+            <div class="title">Umidade</div>
+            <div class="value">96%</div>
+            <div class="sub">Nuvens: 90%</div>
+        </div>
+        <div class="metric-card">
+            <div class="title">Chuva Atual</div>
+            <div class="value">0.1 <span style="font-size: 0.9rem">mm</span></div>
+            <div class="sub">Última Hora</div>
+        </div>
+        <div class="metric-card" style="border-top: 3px solid #3fb950;">
+            <div class="title">Chuva Acumulada</div>
+            <div class="value" style="font-size: 1.35rem; color: #3fb950;">0.8 <span style="font-size: 0.85rem">mm/24h</span></div>
+            <div class="sub" style="color: #3fb950; font-weight: 600;">ESTÁVEL</div>
+            <div style="font-size: 0.7rem; color: #8b949e; margin-top: 2px;">72h: <strong>74.0 mm</strong></div>
+        </div>
+        <div class="metric-card" style="border-top: 3px solid #f85149;">
+            <div class="title">Radiação Solar</div>
+            <div class="value" style="font-size: 1.4rem; color: #f85149;">UV 9.4</div>
+            <div class="sub" style="color: #f85149; font-weight: 600;">Muito Alto</div>
+            <div style="font-size: 0.7rem; color: #8b949e; margin-top: 2px;">Pico Máx. do Dia</div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="sidebar">
+            <div class="summary-card">
+                <div class="large-icon">⛈️</div>
+                <div class="cond">Tempestade / Trovoada</div>
+                <div style="font-size: 0.85rem; color: #8b949e; margin-top: 4px;">Rio de Janeiro (-22.91°, -43.17°)</div>
+            </div>
+
+            
+        <div class="air-card" style="border-left: 4px solid #f85149;">
+            <div class="air-header">
+                <span class="air-title">🍃 Qualidade do Ar (AQI)</span>
+                <span class="air-badge" style="background: #f8514922; color: #f85149; border: 1px solid #f85149;">Insalubre</span>
+            </div>
+            <div class="air-val-row">
+                <span class="air-num" style="color: #f85149;">175</span>
+                <span class="air-scale">Índice US AQI</span>
+            </div>
+            <div class="air-desc">População em geral pode sentir efeitos adversos.</div>
+            <div class="air-pollutants">
+                <span>PM2.5: <strong>27.0 µg/m³</strong></span>
+                <span>PM10: <strong>29.5 µg/m³</strong></span>
+                <span>O₃: <strong>155.0 µg/m³</strong></span>
+            </div>
+        </div>
+        
+
+            <div class="forecast-container">
+                <div class="forecast-title">Previsão dos Próximos Dias</div>
+                <div class="forecast-grid">
+                    
+        <div class="forecast-day">
+            <div class="day-name">Qua (18/11)</div>
+            <div class="day-icon">⛈️</div>
+            <div class="day-temp"><span class="t-max">28.0°</span> / <span class="t-min">22.1°</span></div>
+            <div class="day-rain">💧 30.6 mm</div>
+        </div>
+        
+        <div class="forecast-day">
+            <div class="day-name">Qui (19/11)</div>
+            <div class="day-icon">⛈️</div>
+            <div class="day-temp"><span class="t-max">31.6°</span> / <span class="t-min">23.5°</span></div>
+            <div class="day-rain">💧 10.3 mm</div>
+        </div>
+        
+        <div class="forecast-day">
+            <div class="day-name">Sex (20/11)</div>
+            <div class="day-icon">🌫️</div>
+            <div class="day-temp"><span class="t-max">32.3°</span> / <span class="t-min">24.2°</span></div>
+            <div class="day-rain">💧 0.0 mm</div>
+        </div>
+        
+        <div class="forecast-day">
+            <div class="day-name">Sab (21/11)</div>
+            <div class="day-icon">⛈️</div>
+            <div class="day-temp"><span class="t-max">33.4°</span> / <span class="t-min">24.8°</span></div>
+            <div class="day-rain">💧 2.8 mm</div>
+        </div>
+        
+                </div>
+            </div>
+        </div>
+
+        <div class="map-card">
+            <div class="map-header">
+                <div class="map-tabs">
+                    <button id="tab-rio" class="tab-btn active" onclick="switchMap('rio')">📍 Rio de Janeiro</button>
+                    <button id="tab-world" class="tab-btn" onclick="switchMap('world')">🌎 Mundo (Global)</button>
+                </div>
+                <span style="color: var(--green);">● Satélite em Tempo Real</span>
+            </div>
+            
+            <div id="map-view-rio" class="map-view active">
+                <iframe class="map-frame" src="https://embed.windy.com/embed2.html?lat=-22.9068&lon=-43.1729&detailLat=-22.9068&detailLon=-43.1729&width=100%25&height=100%25&zoom=8&level=surface&overlay=satellite&product=satellite&menu=&message=&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1"></iframe>
+            </div>
+
+            <div id="map-view-world" class="map-view">
+                <iframe class="map-frame" src="https://embed.windy.com/embed2.html?lat=10.0&lon=-20.0&width=100%25&height=100%25&zoom=2&level=surface&overlay=satellite&product=satellite&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Painéis de Alertas Locais e Queimadas (INMET + NASA FIRMS) -->
+    <div class="regional-grid">
+        <div class="regional-card">
+            <div class="regional-header">
+                <h2>⚠️ Avisos Meteorológicos Oficiais (INMET - RJ)</h2>
+                <span style="font-size: 0.75rem; color: #8b949e;">21/11/2026 18:20</span>
+            </div>
+            <div class="regional-body">
+                
+            <div class="inmet-item" style="border-left: 3px solid #e3b341;">
+                <div class="inmet-item-top">
+                    <span class="inmet-desc">Tempestade</span>
+                    <span class="badge" style="background: #e3b34122; color: #e3b341; border: 1px solid #e3b341;">Amarelo: Perigo Potencial</span>
+                </div>
+                <div class="inmet-time">Vigência: 2026-11-21 09:28 até 2026-11-22 23:59</div>
+                <div class="inmet-risco">Chuva entre 20 e 30 mm/h ou até 50 mm/dia, ventos intensos (40-60 km/h), e queda de granizo. Baixo risco de corte de energia elétrica, estragos em plantações, queda de galhos de árvores e de alagamentos.</div>
+            </div>
+            
+            <div class="inmet-item" style="border-left: 3px solid #e3b341;">
+                <div class="inmet-item-top">
+                    <span class="inmet-desc">Tempestade</span>
+                    <span class="badge" style="background: #e3b34122; color: #e3b341; border: 1px solid #e3b341;">Amarelo: Perigo Potencial</span>
+                </div>
+                <div class="inmet-time">Vigência: 2026-11-23 00:00 até 2026-11-23 23:59</div>
+                <div class="inmet-risco">Chuva entre 20 e 30 mm/h ou até 50 mm/dia, ventos intensos (40-60 km/h), e queda de granizo. Baixo risco de corte de energia elétrica, estragos em plantações, queda de galhos de árvores e de alagamentos.</div>
+            </div>
+            
+            </div>
+        </div>
+
+        <div class="regional-card">
+            <div class="regional-header">
+                <h2>🔥 Queimadas e Incêndios Ativos (NASA FIRMS)</h2>
+                <span class="badge" style="background: #3fb95022; color: #3fb950; border: 1px solid #3fb950;">Baixo Risco</span>
+            </div>
+            <div class="regional-body">
+                <div class="firms-stat-grid">
+                    <div class="firms-stat-box">
+                        <div class="firms-stat-num">0</div>
+                        <div class="firms-stat-lbl">Total de Focos (24h)</div>
+                    </div>
+                    <div class="firms-stat-box">
+                        <div class="firms-stat-num" style="color: #3fb950;">0</div>
+                        <div class="firms-stat-lbl">Alta Confiança (Limiar 20)</div>
+                    </div>
+                </div>
+                <div style="font-size: 0.78rem; color: #8b949e; line-height: 1.4;">
+                    Satélite VIIRS S-NPP (Resolução 375m) cobrindo RJ e divisas interestaduais. Status da Chave: <strong style="color: #c9d1d9;">Ativa</strong>.
+                </div>
+            </div>
+        </div>
+
+        <div class="regional-card">
+            <div class="regional-header">
+                <h2>🏛️ Estágio Operacional (COR.Rio / Alerta Rio)</h2>
+                <span class="badge" style="background: #228d4622; color: #228d46; border: 1px solid #228d46; font-weight: bold;">Estágio 1</span>
+            </div>
+            <div class="regional-body">
+                <div style="display: flex; align-items: center; gap: 12px; padding: 6px 0;">
+                    <div style="width: 22px; height: 22px; border-radius: 50%; background: #228d46; box-shadow: 0 0 10px #228d4688; flex-shrink: 0;"></div>
+                    <div>
+                        <div style="font-size: 1.15rem; font-weight: 700; color: #fff;">Estágio 1</div>
+                        <div style="font-size: 0.75rem; color: #8b949e;">Desde: <strong>2026-11-08T08:17:27Z</strong></div>
+                    </div>
+                </div>
+                
+                
+                <div style="font-size: 0.72rem; color: #8b949e; border-top: 1px solid var(--border); padding-top: 6px; margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
+                    <span>ℹ️ Dados oficiais em tempo real</span>
+                    <a href="https://cor.rio/" target="_blank" class="alert-link" style="font-size: 0.72rem;">Portal COR ↗</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Indicadores Climáticos Globais (NASA / NOAA) -->
+    <div class="climate-card">
+        <div class="climate-header">
+            <h2>🌍 Indicadores Climáticos Globais (NASA / NOAA)</h2>
+            <div class="sub">Monitoramento Planetário • Atualizado em 21/11/2026 06:48</div>
+        </div>
+        <div class="climate-grid">
+            <div class="climate-item">
+                <div class="climate-item-top">
+                    <span class="climate-label">CO₂ (Mauna Loa)</span>
+                    <span class="climate-date-badge">Outubro/2026</span>
+                </div>
+                <div class="climate-val">426.69 <span>ppm</span></div>
+                <div class="climate-desc">Concentração média global de dióxido de carbono na atmosfera medida no Observatório de Mauna Loa (NOAA).</div>
+                <div class="sparkline-container">
+                    <canvas id="co2Chart"></canvas>
+                </div>
+            </div>
+
+            <div class="climate-item temp-item">
+                <div class="climate-item-top">
+                    <span class="climate-label">Anomalia Térmica Global (base 1951-1980)</span>
+                    <span class="climate-date-badge">Outubro/2026</span>
+                </div>
+                <div class="climate-val">+1.55 <span>°C</span></div>
+                <div class="climate-desc">Variação da temperatura média global superfície terra-oceano em relação à média de referência 1951–1980 (NASA GISTEMP v4).</div>
+                <div class="sparkline-container">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+
+            <div class="climate-item enso-item">
+                <div class="climate-item-top">
+                    <span class="climate-label">ENSO / ONI (El Niño – La Niña)</span>
+                    <span class="climate-date-badge">Ago-Set-Out/2026</span>
+                </div>
+                <div class="climate-val">+2.46 <span>°C</span></div>
+                <div class="climate-desc"><strong>El Niño muito forte (ONI ≥ 2,0)</strong><br>Índice Oceânico do Niño (NOAA CPC): anomalia da temperatura do Pacífico equatorial central.</div>
+                <div class="sparkline-container">
+                    <canvas id="oniChart"></canvas>
+                </div>
+            </div>
+
+            <div class="climate-item ch4-item">
+                <div class="climate-item-top">
+                    <span class="climate-label">Metano Global (CH₄)</span>
+                    <span class="climate-date-badge">Agosto/2026</span>
+                </div>
+                <div class="climate-val">1943.59 <span>ppb</span></div>
+                <div class="climate-desc">Coluna de tendência global (NOAA GML). <em>Nota: defasagem normal da NOAA.</em></div>
+                <div class="climate-desc">Crescimento anual: <strong>4.37 ppb/ano (2025)</strong></div>
+                <div class="sparkline-container">
+                    <canvas id="ch4Chart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="climate-footer">
+            <span>Fonte: NASA / NOAA — dados atualizados mensalmente</span>
+            <a href="https://science.nasa.gov/climate-change/" target="_blank">Explorar Dados da NASA ↗</a>
+        </div>
+    </div>
+
+    f3_ui_html = _build_frente3_ui_html(indicators, history_records)
+    stale_banner_html = stale_banner_html + f3_ui_html
+    <!-- Pareceres dos Institutos Cientificos -->
+    <div class="alerts-card" style="margin-bottom: 18px;">
+        <div class="alerts-header">
+            <h2>🏛️ Pareceres dos Institutos Científicos (NOAA CPC, NASA, Copernicus, Berkeley, IPCC, ONU)</h2>
+            <div class="sub">Síntese institucional integrada aos indicadores atuais • Atualizado em 21/11/2026 18:20</div>
+        </div>
+        <div class="alerts-grid">
+            
+                <div class="alert-item">
+                    <div class="alert-top">
+                        <div class="alert-country"><strong>NOAA CPC</strong> — Diagnóstico ENSO / ONI & Previsão Sazonal</div>
+                        <div class="alert-badges"><span class="badge badge-clim">ONI +2.46 (Ago-Set-Out/2026)</span></div>
+                    </div>
+                    <div class="alert-title" style="font-size:0.85rem; color:#8b949e; margin-bottom:4px;">NOAA Climate Prediction Center (EUA)</div>
+                    <div class="alert-meta" style="line-height:1.45; color:#c9d1d9;">Condição ativa de El Niño muito forte (ONI ≥ 2,0). O aquecimento anômalo do Pacífico Equatorial amplifica ondas de calor globais, altera o regime de chuvas na América do Sul (seca no Norte/Nordeste e excesso hídrico no Sul) e eleva a energia disponível para ciclones.</div>
+                    <div class="alert-footer">
+                        <span class="alert-note">📑 Boletim Oficial</span>
+                        <a href="https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/" target="_blank" class="alert-link">Fonte Oficial ↗</a>
+                    </div>
+                </div>
+                
+                <div class="alert-item">
+                    <div class="alert-top">
+                        <div class="alert-country"><strong>NASA GISS</strong> — Anomalia Térmica Global (GISTEMP v4)</div>
+                        <div class="alert-badges"><span class="badge badge-clim">+1.55 °C (Outubro/2026)</span></div>
+                    </div>
+                    <div class="alert-title" style="font-size:0.85rem; color:#8b949e; margin-bottom:4px;">NASA Goddard Institute for Space Studies</div>
+                    <div class="alert-meta" style="line-height:1.45; color:#c9d1d9;">Temperatura média global +1.55 °C acima da linha de base 1951–1980, impulsionada pelo forçamento radiativo de GEE (CO₂ em 426.69 ppm, Outubro/2026) somado ao calor oceânico acumulado no Pacífico tropical. Destaque recente NASA: NASA's Curiosity Mars Rover Collects Samples.</div>
+                    <div class="alert-footer">
+                        <span class="alert-note">📑 Boletim Oficial</span>
+                        <a href="https://www.nasa.gov/image-detail/pia26804/" target="_blank" class="alert-link">Fonte Oficial ↗</a>
+                    </div>
+                </div>
+                
+                <div class="alert-item">
+                    <div class="alert-top">
+                        <div class="alert-country"><strong>COPERNICUS</strong> — Reanálise ERA5 & Temperatura Oceânica</div>
+                        <div class="alert-badges"><span class="badge badge-clim">Monitoramento Contínuo ERA5</span></div>
+                    </div>
+                    <div class="alert-title" style="font-size:0.85rem; color:#8b949e; margin-bottom:4px;">Copernicus Climate Change Service (C3S / UE)</div>
+                    <div class="alert-meta" style="line-height:1.45; color:#c9d1d9;">Os registros da reanálise ERA5 confirmam persistência de anomalias térmicas acima de +1,5 °C em relação ao período pré-industrial (1850–1900), com temperaturas da superfície do mar em patamar recorde e intensificação do ciclo hidrológico.</div>
+                    <div class="alert-footer">
+                        <span class="alert-note">📑 Boletim Oficial</span>
+                        <a href="https://climate.copernicus.eu/climate-bulletins" target="_blank" class="alert-link">Fonte Oficial ↗</a>
+                    </div>
+                </div>
+                
+                <div class="alert-item">
+                    <div class="alert-top">
+                        <div class="alert-country"><strong>BERKELEY EARTH</strong> — Temperatura Superfície Terra-Oceano</div>
+                        <div class="alert-badges"><span class="badge badge-clim">Série Global Consolidada</span></div>
+                    </div>
+                    <div class="alert-title" style="font-size:0.85rem; color:#8b949e; margin-bottom:4px;">Berkeley Earth (Análise Independente)</div>
+                    <div class="alert-meta" style="line-height:1.45; color:#c9d1d9;">A avaliação independente corrobora que a combinação entre emissões acumuladas de CO₂ (426.69 ppm) e metano (1943.59 ppb, +4.37 ppb/ano) mantém a trajetória de aquecimento acelerado nas massas continentais do Hemisfério Sul e Norte.</div>
+                    <div class="alert-footer">
+                        <span class="alert-note">📑 Boletim Oficial</span>
+                        <a href="https://berkeleyearth.org/data/" target="_blank" class="alert-link">Fonte Oficial ↗</a>
+                    </div>
+                </div>
+                
+                <div class="alert-item">
+                    <div class="alert-top">
+                        <div class="alert-country"><strong>IPCC</strong> — Consenso Científico & Extremos Climáticos (AR6)</div>
+                        <div class="alert-badges"><span class="badge badge-clim">Síntese Física do Clima</span></div>
+                    </div>
+                    <div class="alert-title" style="font-size:0.85rem; color:#8b949e; margin-bottom:4px;">Painel Intergovernamental sobre Mudanças Climáticas</div>
+                    <div class="alert-meta" style="line-height:1.45; color:#c9d1d9;">Cada fração adicional de aquecimento intensifica eventos extremos compostos (ondas de calor simultâneas a secas, chuvas torrenciais e ciclones intensos). A estabilização térmica exige cortes profundos de CO₂ e redução rápida de CH₄.</div>
+                    <div class="alert-footer">
+                        <span class="alert-note">📑 Boletim Oficial</span>
+                        <a href="https://www.ipcc.ch/reports/" target="_blank" class="alert-link">Fonte Oficial ↗</a>
+                    </div>
+                </div>
+                
+                <div class="alert-item">
+                    <div class="alert-top">
+                        <div class="alert-country"><strong>ONU / OMM</strong> — Estado do Clima Global & Alerta Precoce</div>
+                        <div class="alert-badges"><span class="badge badge-clim">Alerta Climático Global</span></div>
+                    </div>
+                    <div class="alert-title" style="font-size:0.85rem; color:#8b949e; margin-bottom:4px;">Organização Meteorológica Mundial (ONU)</div>
+                    <div class="alert-meta" style="line-height:1.45; color:#c9d1d9;">A OMM destaca a urgência da iniciativa 'Early Warnings for All' diante da escalada de perdas por inundações, secas prolongadas e tempestades severas em países em desenvolvimento.</div>
+                    <div class="alert-footer">
+                        <span class="alert-note">📑 Boletim Oficial</span>
+                        <a href="https://wmo.int/publication-series/state-of-global-climate" target="_blank" class="alert-link">Fonte Oficial ↗</a>
+                    </div>
+                </div>
+                
+        </div>
+    </div>
+
+    <!-- Central de Monitoramento Global (GDACS + NASA EONET) -->
+    <div class="alerts-card">
+        <div class="alerts-header">
+            <h2>🌍 Central Global — Eventos Graves do Planeta (6 ativos)</h2>
+            <div class="sub">GDACS (ONU / Comissão Europeia) + NASA EONET • Vermelhos: 0 | Laranjas: 6 • Atualizado em 21/11/2026 18:20</div>
+        </div>
+        <div class="alerts-grid">
+            
+            <div class="alert-item">
+                <div class="alert-top">
+                    <div class="alert-country">
+                        <span class="alert-icon">☀️</span>
+                        <strong>Burundi, República Democrática do Congo, República Centro-Africana (+10 países)</strong>
+                    </div>
+                    <div class="alert-badges">
+                        <span class="badge badge-orange">ALERTA LARANJA</span>
+                        <span class="badge badge-clim" title="Origem Climática / Meteorológica">[Climático]</span>
+                    </div>
+                </div>
+                <div class="alert-title">Alerta Laranja: Seca Severa (East Africa, Central Sahel-2026) em Burundi, República Democrática do Congo, República Centro-Africana (+10 países)</div>
+                <div class="alert-meta">
+                    <span>Seca Severa (East Africa, Central Sahel-2026)</span>
+                    • <span>Impacto médio de seca agrícola em 1435673 km2</span>
+                </div>
+                <div class="alert-footer">
+                    <span class="alert-note">ℹ️ Origem Climática / Meteorológica</span>
+                    <a href="http://www.gdacs.org/report.aspx?eventtype=DR&eventid=1027450" target="_blank" class="alert-link">Relatório GDACS ↗</a>
+                </div>
+            </div>
+            
+            <div class="alert-item">
+                <div class="alert-top">
+                    <div class="alert-country">
+                        <span class="alert-icon">☀️</span>
+                        <strong>Belize, Costa Rica, Cuba (+7 países)</strong>
+                    </div>
+                    <div class="alert-badges">
+                        <span class="badge badge-orange">ALERTA LARANJA</span>
+                        <span class="badge badge-clim" title="Origem Climática / Meteorológica">[Climático]</span>
+                    </div>
+                </div>
+                <div class="alert-title">Alerta Laranja: Seca Severa (Central America-2026) em Belize, Costa Rica, Cuba (+7 países)</div>
+                <div class="alert-meta">
+                    <span>Seca Severa (Central America-2026)</span>
+                    • <span>Impacto médio de seca agrícola em 728311 km2</span>
+                </div>
+                <div class="alert-footer">
+                    <span class="alert-note">ℹ️ Origem Climática / Meteorológica</span>
+                    <a href="http://www.gdacs.org/report.aspx?eventtype=DR&eventid=1027449" target="_blank" class="alert-link">Relatório GDACS ↗</a>
+                </div>
+            </div>
+            
+            <div class="alert-item">
+                <div class="alert-top">
+                    <div class="alert-country">
+                        <span class="alert-icon">☀️</span>
+                        <strong>Albania, Austria, Bosnia & Herzegovina (+23 países)</strong>
+                    </div>
+                    <div class="alert-badges">
+                        <span class="badge badge-orange">ALERTA LARANJA</span>
+                        <span class="badge badge-clim" title="Origem Climática / Meteorológica">[Climático]</span>
+                    </div>
+                </div>
+                <div class="alert-title">Alerta Laranja: Seca Severa (Europe-2026) em Albania, Austria, Bosnia & Herzegovina (+23 países)</div>
+                <div class="alert-meta">
+                    <span>Seca Severa (Europe-2026)</span>
+                    • <span>Impacto médio de seca agrícola em 1121702 km2</span>
+                </div>
+                <div class="alert-footer">
+                    <span class="alert-note">ℹ️ Origem Climática / Meteorológica</span>
+                    <a href="http://www.gdacs.org/report.aspx?eventtype=DR&eventid=1018332" target="_blank" class="alert-link">Relatório GDACS ↗</a>
+                </div>
+            </div>
+            
+            <div class="alert-item">
+                <div class="alert-top">
+                    <div class="alert-country">
+                        <span class="alert-icon">☀️</span>
+                        <strong>Aruba, Brasil, Colômbia (+6 países)</strong>
+                    </div>
+                    <div class="alert-badges">
+                        <span class="badge badge-orange">ALERTA LARANJA</span>
+                        <span class="badge badge-clim" title="Origem Climática / Meteorológica">[Climático]</span>
+                    </div>
+                </div>
+                <div class="alert-title">Alerta Laranja: Seca Severa (Northern South America, Panama Isthmus-2026) em Aruba, Brasil, Colômbia (+6 países)</div>
+                <div class="alert-meta">
+                    <span>Seca Severa (Northern South America, Panama Isthmus-2026)</span>
+                    • <span>Impacto médio de seca agrícola em 1683760 km2</span>
+                </div>
+                <div class="alert-footer">
+                    <span class="alert-note">ℹ️ Origem Climática / Meteorológica</span>
+                    <a href="http://www.gdacs.org/report.aspx?eventtype=DR&eventid=1023877" target="_blank" class="alert-link">Relatório GDACS ↗</a>
+                </div>
+            </div>
+            
+            <div class="alert-item">
+                <div class="alert-top">
+                    <div class="alert-country">
+                        <span class="alert-icon">🔥</span>
+                        <strong>Wildfire Greene - Caney Creek Lane, Greene, Tennessee</strong>
+                    </div>
+                    <div class="alert-badges">
+                        <span class="badge badge-orange">ALERTA LARANJA</span>
+                        <span class="badge badge-clim" title="Origem Climática / Meteorológica">[Climático]</span>
+                    </div>
+                </div>
+                <div class="alert-title">Monitoramento NASA: Wildfire Greene - Caney Creek Lane, Greene, Tennessee</div>
+                <div class="alert-meta">
+                    <span>Incêndio Florestal Extremo</span>
+                    • <span>Monitoramento orbital NASA (500.0 acres)</span>
+                </div>
+                <div class="alert-footer">
+                    <span class="alert-note">ℹ️ Origem Climática / Meteorológica</span>
+                    <a href="https://irwin.doi.gov/observer/incidents/2026-TNTNS-261114" target="_blank" class="alert-link">Relatório NASA EONET ↗</a>
+                </div>
+            </div>
+            
+            <div class="alert-item">
+                <div class="alert-top">
+                    <div class="alert-country">
+                        <span class="alert-icon">🌀</span>
+                        <strong>Tropical Cyclone Akvan</strong>
+                    </div>
+                    <div class="alert-badges">
+                        <span class="badge badge-orange">ALERTA LARANJA</span>
+                        <span class="badge badge-clim" title="Origem Climática / Meteorológica">[Climático]</span>
+                    </div>
+                </div>
+                <div class="alert-title">Monitoramento NASA: Tropical Cyclone Akvan</div>
+                <div class="alert-meta">
+                    <span>Tempestade Severa / Ciclone</span>
+                    • <span>Monitoramento orbital NASA (30.0 kts)</span>
+                </div>
+                <div class="alert-footer">
+                    <span class="alert-note">ℹ️ Origem Climática / Meteorológica</span>
+                    <a href="https://www.metoc.navy.mil/jtwc/products/io0526.tcw" target="_blank" class="alert-link">Relatório NASA EONET ↗</a>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <div style="margin-top:24px;padding:14px 16px;border-radius:10px;background:#161b22;border:1px solid #30363d;color:#8b949e;font-size:0.84rem;line-height:1.55;">
+        <div style="color:#e6edf3;font-weight:600;margin-bottom:6px;">
+            Aviso: Painel informativo e não oficial. Em emergência, siga sempre a Defesa Civil e o COR.Rio.
+        </div>
+        <div>
+            Fontes e créditos:
+            <a href="https://open-meteo.com/" target="_blank" style="color:#58a6ff;">Weather data by Open-Meteo.com (CC BY 4.0)</a> &bull;
+            <a href="https://www.gdacs.org/" target="_blank" style="color:#58a6ff;">GDACS</a> &bull;
+            <a href="https://portal.inmet.gov.br/" target="_blank" style="color:#58a6ff;">INMET</a> &bull;
+            <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" style="color:#58a6ff;">NASA FIRMS</a> &bull;
+            <a href="https://www.noaa.gov/" target="_blank" style="color:#58a6ff;">NOAA</a> /
+            <a href="https://data.giss.nasa.gov/gistemp/" target="_blank" style="color:#58a6ff;">NASA GISS</a> &bull;
+            <a href="https://cor.rio/" target="_blank" style="color:#58a6ff;">COR.Rio</a>
+        </div>
+    </div>
+
+</body>
+</html>
